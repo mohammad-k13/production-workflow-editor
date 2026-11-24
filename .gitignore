@@ -1,0 +1,21 @@
+# Node.js
+node_modules/
+npm-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Generated output
+dist/
+tmp/
+out-tsc/
+coverage/
+
+# Runtime workflow document
+data/workflow.json
+*.log
+
+# macOS
+.DS_Store
