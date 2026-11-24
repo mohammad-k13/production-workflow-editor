@@ -1,4 +1,4 @@
-import type { Workflow } from './workflow.ts';
+import type { Workflow } from './workflow/index.ts';
 
 export const exampleWorkflow: Workflow = {
   steps: [
