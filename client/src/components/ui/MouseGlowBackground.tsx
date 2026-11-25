@@ -11,10 +11,11 @@ const FONT_FAMILY = '"Cascadia Mono", Consolas, monospace';
 const ASCII_RAMP = '.,:;!+=*#%@';
 const POINTER_RADIUS = 52;
 const TRAIL_RADIUS = 62;
-const TRAIL_LIFETIME_MS = 460;
-const MAX_TRAIL_POINTS = 22;
+const TRAIL_LIFETIME_MS = 1_200;
+const MAX_TRAIL_POINTS = 96;
+const MIN_GLOW = 0.035;
 
-/** A full-page ASCII field with a short, colored glyph trail around the pointer. */
+/** A full-page ASCII field with a fading trail along the pointer's path. */
 export function MouseGlowBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -31,9 +32,9 @@ export function MouseGlowBackground() {
     const bounds = container.getBoundingClientRect();
     let width = bounds.width;
     let height = bounds.height;
-    let cells = createGlyphCells(width, height);
+    let rows = createGlyphRows(width, height);
     let pointer: Point = { x: width / 2, y: height / 2 };
-    let previousPointer = { ...pointer };
+    let previousPointer: Point | null = null;
     let cursorEnergy = 0;
     let trail: TrailPoint[] = [];
     let frameId = 0;
@@ -59,9 +60,11 @@ export function MouseGlowBackground() {
         backgroundContext.textBaseline = 'middle';
         backgroundContext.font = `${BASE_FONT_SIZE}px ${FONT_FAMILY}`;
         backgroundContext.fillStyle = isDark ? '#c6cdde' : '#35425c';
-        for (const cell of cells) {
-          backgroundContext.globalAlpha = 0.11 + cell.seed * 0.05;
-          backgroundContext.fillText(cell.glyph, cell.x, cell.y);
+        for (const row of rows) {
+          for (const cell of row) {
+            backgroundContext.globalAlpha = 0.11 + cell.seed * 0.05;
+            backgroundContext.fillText(cell.glyph, cell.x, cell.y);
+          }
         }
         paintBackground = false;
       }
@@ -73,39 +76,18 @@ export function MouseGlowBackground() {
       context.textAlign = 'center';
       context.textBaseline = 'middle';
 
-      const samples = trail.flatMap((sample) => {
+      // Each sample visits only nearby rows and columns, even when the trail
+      // stretches diagonally across most of the screen.
+      const highlights = new Map<GlyphCell, number>();
+      addGlow(rows, highlights, pointer, POINTER_RADIUS, cursorEnergy);
+      for (const sample of trail) {
         const age = time - sample.time;
-        if (age < 0 || age >= TRAIL_LIFETIME_MS) return [];
+        if (age < 0 || age >= TRAIL_LIFETIME_MS) continue;
         const strength = sample.strength * (1 - age / TRAIL_LIFETIME_MS) ** 1.7 * 0.88;
-        return strength > 0.035 ? [{ ...sample, strength }] : [];
-      });
-      if (cursorEnergy <= 0.035 && samples.length === 0) return;
-
-      let left = pointer.x - POINTER_RADIUS;
-      let right = pointer.x + POINTER_RADIUS;
-      let top = pointer.y - POINTER_RADIUS;
-      let bottom = pointer.y + POINTER_RADIUS;
-      for (const sample of samples) {
-        left = Math.min(left, sample.x - TRAIL_RADIUS);
-        right = Math.max(right, sample.x + TRAIL_RADIUS);
-        top = Math.min(top, sample.y - TRAIL_RADIUS);
-        bottom = Math.max(bottom, sample.y + TRAIL_RADIUS);
+        addGlow(rows, highlights, sample, TRAIL_RADIUS, strength);
       }
 
-      for (const cell of cells) {
-        if (cell.x < left || cell.x > right || cell.y < top || cell.y > bottom) continue;
-        let influence = 0;
-        const pointerDistanceSquared = distanceSquared(cell, pointer);
-        const pointerFalloff = 1 - pointerDistanceSquared / POINTER_RADIUS ** 2;
-        if (pointerFalloff > 0) influence = cursorEnergy * pointerFalloff ** 2;
-
-        for (const sample of samples) {
-          const falloff = 1 - distanceSquared(cell, sample) / TRAIL_RADIUS ** 2;
-          if (falloff <= 0) continue;
-          influence = Math.max(influence, sample.strength * falloff ** 2);
-        }
-        if (influence <= 0.035) continue;
-
+      for (const [cell, influence] of highlights) {
         const level = Math.min(
           ASCII_RAMP.length - 1,
           Math.floor(cell.density * (ASCII_RAMP.length - 1) + influence * 5),
@@ -151,25 +133,32 @@ export function MouseGlowBackground() {
         x: clamp(event.clientX - rect.left, 0, rect.width),
         y: clamp(event.clientY - rect.top, 0, rect.height),
       };
-      const dx = next.x - previousPointer.x;
-      const dy = next.y - previousPointer.y;
+      const last = previousPointer ?? next;
+      if (!previousPointer) {
+        previousPointer = next;
+        cursorEnergy = 0.42;
+      }
+      const dx = next.x - last.x;
+      const dy = next.y - last.y;
       const distance = Math.hypot(dx, dy);
       pointer = next;
 
       if (distance > 2) {
-        const segments = Math.min(18, Math.max(1, Math.ceil(distance / 5)));
+        const segments = Math.min(18, Math.ceil(distance / 7));
         const strength = clamp(0.42 + distance / 72, 0.42, 1);
-        const now = performance.now();
-        for (let index = 1; index <= segments; index += 1) {
-          const progress = index / segments;
-          trail.push({
-            x: previousPointer.x + dx * progress,
-            y: previousPointer.y + dy * progress,
-            time: now - (segments - index) * 2,
-            strength,
-          });
+        if (!reducedMotion.matches) {
+          const now = performance.now();
+          for (let index = 1; index <= segments; index += 1) {
+            const progress = index / segments;
+            trail.push({
+              x: last.x + dx * progress,
+              y: last.y + dy * progress,
+              time: now - (segments - index) * 2,
+              strength,
+            });
+          }
+          if (trail.length > MAX_TRAIL_POINTS) trail = trail.slice(-MAX_TRAIL_POINTS);
         }
-        if (trail.length > MAX_TRAIL_POINTS) trail = trail.slice(-MAX_TRAIL_POINTS);
         cursorEnergy = Math.max(cursorEnergy, strength);
         previousPointer = next;
       }
@@ -185,10 +174,11 @@ export function MouseGlowBackground() {
       const rect = container.getBoundingClientRect();
       width = rect.width;
       height = rect.height;
-      cells = createGlyphCells(width, height);
+      rows = createGlyphRows(width, height);
+      trail = [];
       paintBackground = true;
       pointer = { x: width / 2, y: height / 2 };
-      previousPointer = { ...pointer };
+      previousPointer = null;
       draw(performance.now());
     };
 
@@ -196,6 +186,7 @@ export function MouseGlowBackground() {
       if (reducedMotion.matches) {
         window.cancelAnimationFrame(frameId);
         frameId = 0;
+        trail = [];
       }
       paintBackground = true;
       draw(performance.now());
@@ -229,10 +220,11 @@ export function MouseGlowBackground() {
   );
 }
 
-function createGlyphCells(width: number, height: number): GlyphCell[] {
-  const cells: GlyphCell[] = [];
+function createGlyphRows(width: number, height: number): GlyphCell[][] {
+  const rows: GlyphCell[][] = [];
   let row = 0;
   for (let y = CELL_HEIGHT / 2; y < height; y += CELL_HEIGHT, row += 1) {
+    const cells: GlyphCell[] = [];
     let column = 0;
     const offset = row % 2 === 0 ? 0 : CELL_WIDTH / 2;
     for (let x = CELL_WIDTH / 2 + offset; x < width; x += CELL_WIDTH, column += 1) {
@@ -242,8 +234,31 @@ function createGlyphCells(width: number, height: number): GlyphCell[] {
       const glyphIndex = Math.floor(density * (ASCII_RAMP.length - 1));
       cells.push({ x, y, seed, density, glyph: ASCII_RAMP[glyphIndex] });
     }
+    rows.push(cells);
   }
-  return cells;
+  return rows;
+}
+
+function addGlow(
+  rows: GlyphCell[][], highlights: Map<GlyphCell, number>, point: Point, radius: number, strength: number,
+) {
+  if (strength <= MIN_GLOW) return;
+  const firstRow = Math.max(0, Math.ceil((point.y - radius - CELL_HEIGHT / 2) / CELL_HEIGHT));
+  const lastRow = Math.min(rows.length - 1, Math.floor((point.y + radius - CELL_HEIGHT / 2) / CELL_HEIGHT));
+  const radiusSquared = radius * radius;
+  for (let rowIndex = firstRow; rowIndex <= lastRow; rowIndex += 1) {
+    const row = rows[rowIndex];
+    if (!row.length) continue;
+    const firstColumn = Math.max(0, Math.ceil((point.x - radius - row[0].x) / CELL_WIDTH));
+    const lastColumn = Math.min(row.length - 1, Math.floor((point.x + radius - row[0].x) / CELL_WIDTH));
+    for (let column = firstColumn; column <= lastColumn; column += 1) {
+      const cell = row[column];
+      const falloff = 1 - distanceSquared(cell, point) / radiusSquared;
+      if (falloff <= 0) continue;
+      const influence = strength * falloff ** 2;
+      if (influence > Math.max(MIN_GLOW, highlights.get(cell) ?? 0)) highlights.set(cell, influence);
+    }
+  }
 }
 
 function distanceSquared(first: Point, second: Point): number {

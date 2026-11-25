@@ -54,13 +54,13 @@ body {
   z-index: 3;
   inset: 0;
   display: grid;
-  grid-template-rows: 70px auto minmax(240px, 1fr) 88px;
+  grid-template-rows: 70px auto minmax(180px, 1fr) auto;
   padding: 16px 22px 18px;
   color: #1d2940;
 }
 
 .editor-header, .editor-toolbar, .header-actions, .editor-brand, .workflow-picker__button, .toolbar-actions,
-.summary-title, .workflow-summary, .canvas-topline, .input-with-suffix, .step-inspector__heading {
+.summary-title, .canvas-topline, .input-with-suffix, .step-inspector__heading {
   display: flex;
   align-items: center;
 }
@@ -80,7 +80,7 @@ body {
   display:grid;
   gap:5px;
 }
-.workflow-picker > span, .summary-metric > span, .summary-path > span { color:#8390a5; font-size:9px; font-weight:700; letter-spacing:.13em; }
+.workflow-picker > span, .summary-metric > span { color:#8390a5; font-size:9px; font-weight:700; letter-spacing:.13em; }
 .workflow-picker__button { justify-content:space-between; gap:16px; border:0; padding:0; color:#27344b; font:600 12px inherit; background:transparent; cursor:pointer; }
 .workflow-picker__trigger { display:flex; align-items:center; justify-content:space-between; gap:18px; min-width:164px; border:1px solid var(--picker-border); border-radius:9px; padding:7px 9px 7px 11px; color:var(--picker-ink); background:transparent; font:600 11px system-ui,sans-serif; text-align:left; cursor:pointer; -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); }
 .workflow-picker__trigger:hover,.workflow-picker__trigger[aria-expanded="true"] { background:var(--picker-hover); }
@@ -142,14 +142,58 @@ body {
 .step-inspector__note { padding:8px 9px; border-radius:8px; color:#77849a; background:#f4f6fb; font-size:10px; }
 .step-inspector__note strong { color:#485773; }
 .delete-step { justify-self:start; border:0; padding:2px 0; color:#c06161; background:transparent; font:600 10px inherit; cursor:pointer; }
-.workflow-summary { gap:0; min-width:0; margin-top:12px; padding:0 15px; border:1px solid rgba(106,125,157,.14); border-radius:15px; background:rgba(255,255,255,.38); }
-.summary-title { flex:1.35; gap:10px; min-width:170px; }
+.workflow-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:center; min-width:0; margin-top:12px; padding:10px 15px; border:1px solid rgba(106,125,157,.14); border-radius:15px; background:rgba(255,255,255,.38); }
+.summary-stats { display:grid; gap:9px; min-width:0; padding-right:14px; }
+.summary-metrics { display:flex; flex-wrap:wrap; gap:8px 0; }
 .summary-icon { display:grid; place-items:center; width:30px; height:30px; border-radius:10px; color:#6f80d7; background:#eef0ff; font-size:17px; }
 .summary-title strong { color:#34415a; font-size:11px; }
-.summary-metric, .summary-path { display:grid; gap:5px; padding:0 18px; border-left:1px solid rgba(100,119,151,.14); }
+.summary-metric { display:grid; gap:5px; padding:0 18px; border-left:1px solid rgba(100,119,151,.14); }
+.summary-metric:first-child { padding-left:0; border-left:0; }
 .summary-metric strong { color:#303e58; font-size:13px; }
-.summary-path { flex:1; overflow:hidden; }
-.summary-path strong { overflow:hidden; color:#5e6d89; font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+.critical-path {
+  min-width:0;
+  padding-left:14px;
+  border-left:1px solid rgb(45 45 50 / 13%);
+  color:#45454b;
+}
+
+.critical-path__title {
+  margin:0 0 5px;
+  font-size:9px;
+  font-weight:700;
+  letter-spacing:.13em;
+  text-transform:uppercase;
+}
+
+.critical-path__scroll {
+  overflow-x:auto;
+  overscroll-behavior-inline:contain;
+  scrollbar-width:thin;
+  scrollbar-color:rgb(128 128 128 / 55%) transparent;
+  border-radius:3px;
+}
+
+.critical-path__scroll:focus-visible { outline:1px solid currentColor; outline-offset:2px; }
+.critical-path__track { display:flex; gap:18px; width:max-content; margin:0; padding:0 2px 4px; list-style:none; }
+.critical-path__step { position:relative; display:grid; gap:3px; min-width:7.5rem; max-width:15rem; padding-top:14px; }
+.critical-path__step:not(:last-child)::before {
+  content:'';
+  position:absolute;
+  top:5px;
+  left:4px;
+  right:-22px;
+  border-top:1px solid currentColor;
+  opacity:.45;
+}
+.critical-path__marker { position:absolute; top:2px; left:0; width:7px; height:7px; border-radius:50%; background:currentColor; }
+.critical-path__name,.critical-path__time { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.critical-path__name { font-size:11px; }
+.critical-path__time,.critical-path__empty { font-size:10px; opacity:.82; }
+.critical-path__empty { margin:8px 0 4px; }
+
+@media (prefers-color-scheme: dark) {
+  .critical-path { color:#bfbfc4; border-left-color:rgb(255 255 255 / 12%); }
+}
 
 .ascii-background {
   position: absolute;
@@ -226,7 +270,7 @@ body {
   .editor-header { border-bottom-color:#ffffff18; }
   .editor-brand div > span,.summary-title div > span,.editor-toolbar p,.save-state { color:#9ca8bd; }
   .workflow-picker__button,.editor-toolbar h1 { color:#eef2fc; }
-  .workflow-picker > span,.summary-metric > span,.summary-path > span,.canvas-topline { color:#8996ad; }
+  .workflow-picker > span,.summary-metric > span,.canvas-topline { color:#8996ad; }
   .button--quiet { color:#c1cbe0; border-color:#ffffff20; background:#ffffff0c; }
   .workflow-canvas { border-color:#ffffff1c; background:#0d111a55; box-shadow:inset 0 1px #ffffff0a,0 10px 34px #0003; }
   .step-node { border-color:rgba(245,247,252,.38); color:#e2e5ec; background:linear-gradient(145deg,rgba(239,242,248,.2),rgba(218,224,235,.11)); box-shadow:0 8px 20px #0003,inset 0 1px rgba(255,255,255,.28); }
@@ -234,7 +278,6 @@ body {
   .step-node__duration,.step-node__eyebrow { color:#b8bfcc; }
   .step-node .react-flow__handle { border-color:rgba(238,241,247,.9); background:#a9b2c1; }
   .workflow-summary { border-color:#ffffff1a; background:#11172280; }
-  .summary-path strong { color:#bac5db; }
   .summary-icon { color:#aab5ff; background:#6b71c52b; }
   .step-inspector { border-color:#ffffff25; background:#171e2bed; }
   .step-inspector__heading,.step-inspector label { color:#abb7cc; }
@@ -269,11 +312,10 @@ body {
   .editor-toolbar h1 { font-size:16px; }
   .editor-toolbar p { max-width:230px; line-height:1.5; }
   .toolbar-actions { flex-wrap:wrap; }
-  .workflow-summary { flex-wrap:wrap; gap:12px 0; padding:12px; }
-  .summary-title { flex-basis:100%; }
-  .summary-metric,.summary-path { padding:0 10px; }
-  .summary-metric:first-of-type { padding-left:0; border-left:0; }
-  .summary-path { flex:1 1 100%; border-left:0; padding:0; }
+  .workflow-summary { grid-template-columns:minmax(0,1fr); gap:9px; padding:10px 12px; }
+  .summary-stats { padding-right:0; }
+  .summary-metric { padding:0 10px; }
+  .critical-path { border-left:0; padding-left:0; }
   .step-inspector { right:8px; width:min(226px,calc(100% - 32px)); }
 }
 
@@ -282,7 +324,7 @@ body {
 .editor-header { border-bottom-color: rgba(45, 45, 50, .12); }
 .editor-brand__mark { color: #55555b; border: 1px solid rgba(255,255,255,.72); background: linear-gradient(140deg,rgba(255,255,255,.76),rgba(225,225,229,.48)); box-shadow: 0 5px 14px #2222; }
 .editor-brand div > span,.summary-title div > span,.editor-toolbar p,.save-state { color: #77777d; }
-.workflow-picker > span,.summary-metric > span,.summary-path > span,.canvas-topline,.canvas-topline > span:first-child { color: #85858b; }
+.workflow-picker > span,.summary-metric > span,.canvas-topline,.canvas-topline > span:first-child { color: #85858b; }
 .workflow-picker__button { color: #39393e; }
 .button--quiet { color: #5c5c62; border-color: rgba(0,0,0,.13); background: transparent; }
 .button--primary { color: #414147; border-color: rgba(0,0,0,.23); background: rgba(0,0,0,.045); box-shadow: inset 1px 0 rgba(255,255,255,.3); }
@@ -310,15 +352,14 @@ body {
 .workflow-summary { border-color: rgba(0,0,0,.12); background: transparent; box-shadow: inset 1px 0 rgba(255,255,255,.24); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
 .summary-icon { color: #64646a; border: 1px solid rgba(255,255,255,.74); background: rgba(255,255,255,.42); }
 .summary-title strong,.summary-metric strong { color: #45454b; }
-.summary-metric,.summary-path { border-left-color: rgba(45,45,50,.13); }
-.summary-path strong { color: #69696f; }
+.summary-metric { border-left-color: rgba(45,45,50,.13); }
 
 @media (prefers-color-scheme: dark) {
   .editor-shell { color: #a6a6ab; }
   .editor-brand__mark { opacity: .58; }
   .editor-brand strong,.workflow-picker__button,.editor-toolbar h1 { color: #b0b0b5; }
   .editor-brand div > span,.summary-title div > span,.editor-toolbar p,.save-state { color: #77777d; }
-  .workflow-picker > span,.summary-metric > span,.summary-path > span,.canvas-topline,.canvas-topline > span:first-child { color: #77777d; }
+  .workflow-picker > span,.summary-metric > span,.canvas-topline,.canvas-topline > span:first-child { color: #77777d; }
   .button--quiet { color: #99999f; border-color: #ffffff0d; background: rgba(255,255,255,.022); }
   .button--primary { color: #a5a5aa; border-color: #ffffff14; background: linear-gradient(135deg,rgba(255,255,255,.065),rgba(210,210,215,.025)); box-shadow: 0 5px 14px #0001; }
   .workflow-canvas { border-color: rgba(255,255,255,.09); background: transparent; box-shadow: inset 0 1px rgba(255,255,255,.04),0 10px 34px rgba(0,0,0,.1); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
@@ -339,21 +380,20 @@ body {
   .icon-button { background: rgba(255,255,255,.07); }
   .workflow-summary { border-color: rgba(255,255,255,.15); background: rgba(220,220,224,.045); }
   .summary-title strong,.summary-metric strong { color: #bfbfc4; }
-  .summary-path strong { color: #a6a6ac; }
   .summary-icon { color: #aaaab0; border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.055); }
-  .summary-metric,.summary-path { border-left-color: rgba(255,255,255,.12); }
+  .summary-metric { border-left-color: rgba(255,255,255,.12); }
 
   .editor-shell { color: #e7e7ea; }
   .editor-brand__mark { color: #e2e2e5; background: linear-gradient(140deg,rgba(245,245,247,.22),rgba(200,200,205,.1)); }
   .editor-brand div > span,.summary-title div > span,.editor-toolbar p,.save-state { color: #b0b0b6; }
   .workflow-picker__button,.editor-toolbar h1 { color: #ededf0; }
-  .workflow-picker > span,.summary-metric > span,.summary-path > span,.canvas-topline,.canvas-topline > span:first-child { color: #aaaab0; }
+  .workflow-picker > span,.summary-metric > span,.canvas-topline,.canvas-topline > span:first-child { color: #aaaab0; }
   .button--quiet { color: #d0d0d4; border-color: #ffffff22; background: #ffffff0c; }
   .button--primary { color: #e5e5e8; border-color: #ffffff42; background: linear-gradient(135deg,#ffffff2a,#d8d8dc14); }
   .workflow-canvas { border-color: #ffffff30; background: rgba(255,255,255,.035); box-shadow: inset 0 1px #ffffff10,0 10px 34px #0003; }
   .step-node { color: #e5e5e8; border-color: #ffffff48; background: linear-gradient(145deg,rgba(245,245,247,.2),rgba(205,205,210,.1)); box-shadow: 0 8px 20px #0003,inset 0 1px #ffffff30; }
   .step-node__name,.summary-title strong,.summary-metric strong { color: #ededf0; }
-  .step-node__duration,.step-node__duration span,.step-node__eyebrow,.summary-path strong { color: #c5c5ca; }
+  .step-node__duration,.step-node__duration span,.step-node__eyebrow { color: #c5c5ca; }
   .workflow-canvas .react-flow__controls,.workflow-canvas .react-flow__controls-button { border-color: #ffffff28; background: rgba(48,48,53,.84); color: #e2e2e6; fill: #e2e2e6; }
   .workflow-canvas .react-flow__edge-path { stroke: #bdbdc2; }
   .workflow-canvas .react-flow__edge.workflow-edge--critical .react-flow__edge-path { stroke: #f0f0f2; }
@@ -365,7 +405,7 @@ body {
   .icon-button { background: #ffffff12; }
   .workflow-summary { border-color: #ffffff28; background: rgba(220,220,224,.08); }
   .summary-icon { color: #dedee2; border-color: #ffffff28; background: #ffffff10; }
-  .summary-metric,.summary-path { border-left-color: #ffffff20; }
+  .summary-metric { border-left-color: #ffffff20; }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -373,7 +413,7 @@ body {
   .editor-brand__mark { opacity: .78; }
   .editor-brand strong,.workflow-picker__button,.editor-toolbar h1 { color: #d0d0d4; }
   .editor-brand div > span,.summary-title div > span,.editor-toolbar p,.save-state { color: #929297; }
-  .workflow-picker > span,.summary-metric > span,.summary-path > span,.canvas-topline,.canvas-topline > span:first-child { color: #8e8e94; }
+  .workflow-picker > span,.summary-metric > span,.canvas-topline,.canvas-topline > span:first-child { color: #8e8e94; }
   .button--quiet { color: #b0b0b5; border-color: #ffffff18; background: transparent; }
   .button--primary { color: #c5c5c9; border-color: #ffffff2e; background: rgba(255,255,255,.035); box-shadow: inset 1px 0 rgba(255,255,255,.12); }
   .workflow-canvas { border-color: rgba(255,255,255,.12); background: transparent; box-shadow: inset 1px 0 rgba(255,255,255,.08),0 8px 24px rgba(0,0,0,.12); -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px); }
@@ -395,9 +435,8 @@ body {
   .icon-button { background: rgba(255,255,255,.035); }
   .workflow-summary { border-color: rgba(255,255,255,.085); background: transparent; box-shadow: inset 1px 0 rgba(255,255,255,.10); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
   .summary-title strong,.summary-metric strong { color: #a5a5aa; }
-  .summary-path strong { color: #88888e; }
   .summary-icon { color: #96969c; border-color: rgba(255,255,255,.09); background: rgba(255,255,255,.025); }
-  .summary-metric,.summary-path { border-left-color: rgba(255,255,255,.065); }
+  .summary-metric { border-left-color: rgba(255,255,255,.065); }
   .workflow-picker select { color:#b0b0b5; }
 }
 
