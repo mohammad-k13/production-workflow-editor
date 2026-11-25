@@ -31,10 +31,13 @@ export function MouseGlowBackground() {
     const field = fieldRef.current;
     const context = canvas?.getContext('2d');
     if (!canvas || !field || !context) return;
+    const container = field.parentElement;
+    if (!container) return;
 
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const darkMode = window.matchMedia('(prefers-color-scheme: dark)');
-    const position: Point = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    const initialBounds = container.getBoundingClientRect();
+    const position: Point = { x: initialBounds.width / 2, y: initialBounds.height / 2 };
     const target: Point = { ...position };
     const velocity: Point = { x: 0, y: 0 };
     const lastPointer: Point = { ...position };
@@ -124,20 +127,23 @@ export function MouseGlowBackground() {
     };
 
     const onPointerMove = (event: PointerEvent) => {
-      const dx = event.clientX - lastPointer.x;
-      const dy = event.clientY - lastPointer.y;
+      const bounds = container.getBoundingClientRect();
+      const pointerX = clamp(event.clientX - bounds.left, 0, bounds.width);
+      const pointerY = clamp(event.clientY - bounds.top, 0, bounds.height);
+      const dx = pointerX - lastPointer.x;
+      const dy = pointerY - lastPointer.y;
       const distance = Math.hypot(dx, dy);
-      target.x = event.clientX;
-      target.y = event.clientY;
+      target.x = pointerX;
+      target.y = pointerY;
 
       if (distance > 0.3) {
-        pointerPulse.x = event.clientX;
-        pointerPulse.y = event.clientY;
+        pointerPulse.x = pointerX;
+        pointerPulse.y = pointerY;
         pointerPulse.dirX = dx / distance;
         pointerPulse.dirY = dy / distance;
         pointerPulse.strength = Math.min(38, pointerPulse.strength + Math.min(distance, 80) * 0.52);
-        lastPointer.x = event.clientX;
-        lastPointer.y = event.clientY;
+        lastPointer.x = pointerX;
+        lastPointer.y = pointerY;
       }
 
       if (reducedMotion.matches) {
@@ -171,8 +177,9 @@ export function MouseGlowBackground() {
     };
 
     const onResize = () => {
-      target.x = window.innerWidth / 2;
-      target.y = window.innerHeight / 2;
+      const bounds = container.getBoundingClientRect();
+      target.x = bounds.width / 2;
+      target.y = bounds.height / 2;
       if (reducedMotion.matches) {
         position.x = target.x;
         position.y = target.y;
