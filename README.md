@@ -32,11 +32,11 @@ The default configuration needs no environment file. Optional shell variables ar
 ## Code organization
 
 - **Modules and directories.** `shared/` owns workflow data, validation, graph traversal and scheduling. `client/` owns the editor and its HTTP adapter, and `server/` owns the HTTP routes and file persistence.
-- **Interfaces and boundaries.** React Flow emits graph events and renders a projection of the workflow. The client API module handles the wire format, while the server router delegates file operations to a repository that tests can substitute.
+- **Interfaces and boundaries.** React Flow emits graph events and renders a projection of the workflow. The workflow API module validates endpoint payloads and uses one Axios client with a response interceptor for HTTP and network errors. The server router delegates file operations to a repository that tests can substitute.
 - **Readability.** The graph view, step form, workflow selector, edit history and load/save session live in named modules. Tests describe workflow outcomes such as a dependent step waiting for its last prerequisite.
 - **Maintainability.** Both sides call the same validator. One workflow document drives graph rendering, calculations, persistence and undo, and repeated graph updates preserve unchanged nodes and edges.
 - **Extensibility.** Start new scheduling behavior in the shared model or scheduler and add a focused domain test. Change the client projection for new display needs or replace the repository to introduce a different storage backend.
-- **Tools.** React and TypeScript provide the typed UI, and React Flow supplies canvas interactions that would otherwise need custom drag, viewport, and connection code. Vite runs the local client, Express handles routing and JSON, and Node's test runner covers the domain and real HTTP requests without a separate test framework. The scheduler uses a small topological traversal because the rules fit a directed acyclic graph and the project can test them directly.
+- **Tools.** React and TypeScript provide the typed UI, and React Flow supplies drag, viewport, and connection interactions. Axios gives the client a shared response interceptor and configurable adapter for tests. Vite runs the local client, Express handles routing and JSON, and Node's test runner covers the domain, client transport, and real HTTP requests. A small topological traversal handles scheduling without a graph dependency.
 
 ## Performance verification
 
@@ -46,4 +46,4 @@ As a separate check on the scheduling logic, I warmed up the scheduler with 100 
 
 ## How I used AI
 
-I used Codex for implementation and review in small iterations, giving it the brief, the project structure, visual feedback, and the expected behavior for save conflicts and undo. I reviewed changes in the running editor, reported drag and styling problems, and used code review, automated checks and browser verification to assess the final behavior.
+I used Codex for implementation and review in small iterations, giving it the brief, the project structure, visual feedback, and the expected behavior for save conflicts and undo. For the Axios and component refactor, I separated implementation, code review, and regression tests across three agents. I reviewed changes in the running editor and used code review, automated checks, and browser verification to assess the final behavior.

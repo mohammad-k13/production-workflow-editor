@@ -8,7 +8,7 @@ type WorkflowHistory = {
   editGroup?: string;
 };
 
-type HistoryAction =
+export type WorkflowHistoryAction =
   | { type: 'edit'; update: (workflow: Workflow) => Workflow; group?: string }
   | { type: 'finish-edit' }
   | { type: 'replace'; workflow: Workflow }
@@ -18,7 +18,7 @@ export function createWorkflowHistory(workflow: Workflow): WorkflowHistory {
   return { workflow, previous: [] };
 }
 
-export function workflowHistoryReducer(history: WorkflowHistory, action: HistoryAction): WorkflowHistory {
+export function workflowHistoryReducer(history: WorkflowHistory, action: WorkflowHistoryAction): WorkflowHistory {
   switch (action.type) {
     case 'edit': {
       const workflow = action.update(history.workflow);
