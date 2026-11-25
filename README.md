@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite proxies `/api` to Express on port 3001. To run the two processes in separate terminals, use `npm run dev:client` and `npm run dev:server`.
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite proxies `/api` to Express on port 3001. To run the two processes in separate terminals, use `npm run dev:client` and `npm run dev:server`. The API watches its source files and restarts on changes. After pulling this version into an already running session, restart both processes once to pick up the new development command.
 
 ```sh
 npm test

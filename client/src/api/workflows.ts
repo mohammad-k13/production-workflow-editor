@@ -16,8 +16,13 @@ export async function listWorkflows(signal?: AbortSignal): Promise<WorkflowMetad
 export async function loadWorkflow(id: WorkflowId, signal?: AbortSignal): Promise<LoadedWorkflow> {
   const response = await fetch(`/api/workflows/${id}`, { signal, cache: 'no-store' });
   const body = await readResponse(response);
-  if (!isWorkflowMetadata(body) || body.id !== id || !isVersion(body.version) ||
-    !validateWorkflow(body.workflow).valid) throw invalidResponse();
+  if (!isWorkflowMetadata(body) || body.id !== id || !validateWorkflow(body.workflow).valid) {
+    throw invalidResponse();
+  }
+  if (body.version === undefined) {
+    throw new Error('The workflow server is running an older version. Restart both processes with npm run dev, then retry.');
+  }
+  if (!isVersion(body.version)) throw invalidResponse();
   return { id, name: body.name, version: body.version, workflow: body.workflow as Workflow };
 }
 
