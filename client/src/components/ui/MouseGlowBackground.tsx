@@ -4,8 +4,10 @@ type Point = { x: number; y: number };
 type GlyphCell = Point & { glyph: string; seed: number; density: number };
 type TrailPoint = Point & { time: number; strength: number };
 
-const CELL_WIDTH = 18;
-const CELL_HEIGHT = 24;
+const CELL_WIDTH = 9;
+const CELL_HEIGHT = 12;
+const BASE_FONT_SIZE = 10;
+const FONT_FAMILY = '"Cascadia Mono", Consolas, monospace';
 const ASCII_RAMP = '.,:;!+=*#%@';
 const POINTER_RADIUS = 52;
 const TRAIL_RADIUS = 62;
@@ -20,7 +22,9 @@ export function MouseGlowBackground() {
     const canvas = canvasRef.current;
     const container = canvas?.parentElement;
     const context = canvas?.getContext('2d');
-    if (!canvas || !container || !context) return;
+    const background = document.createElement('canvas');
+    const backgroundContext = background.getContext('2d');
+    if (!canvas || !container || !context || !backgroundContext) return;
 
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const darkMode = window.matchMedia('(prefers-color-scheme: dark)');
@@ -34,6 +38,7 @@ export function MouseGlowBackground() {
     let trail: TrailPoint[] = [];
     let frameId = 0;
     let previousTime = 0;
+    let paintBackground = true;
 
     const draw = (time: number) => {
       const isDark = darkMode.matches;
@@ -43,50 +48,76 @@ export function MouseGlowBackground() {
       if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
         canvas.width = pixelWidth;
         canvas.height = pixelHeight;
-        context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+        paintBackground = true;
       }
 
+      if (paintBackground) {
+        background.width = pixelWidth;
+        background.height = pixelHeight;
+        backgroundContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+        backgroundContext.textAlign = 'center';
+        backgroundContext.textBaseline = 'middle';
+        backgroundContext.font = `${BASE_FONT_SIZE}px ${FONT_FAMILY}`;
+        backgroundContext.fillStyle = isDark ? '#c6cdde' : '#35425c';
+        for (const cell of cells) {
+          backgroundContext.globalAlpha = 0.11 + cell.seed * 0.05;
+          backgroundContext.fillText(cell.glyph, cell.x, cell.y);
+        }
+        paintBackground = false;
+      }
+
+      if (pixelWidth === 0 || pixelHeight === 0) return;
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
       context.clearRect(0, 0, width, height);
+      context.drawImage(background, 0, 0, pixelWidth / pixelRatio, pixelHeight / pixelRatio);
       context.textAlign = 'center';
       context.textBaseline = 'middle';
+
+      const samples = trail.flatMap((sample) => {
+        const age = time - sample.time;
+        if (age < 0 || age >= TRAIL_LIFETIME_MS) return [];
+        const strength = sample.strength * (1 - age / TRAIL_LIFETIME_MS) ** 1.7 * 0.88;
+        return strength > 0.035 ? [{ ...sample, strength }] : [];
+      });
+      if (cursorEnergy <= 0.035 && samples.length === 0) return;
+
+      let left = pointer.x - POINTER_RADIUS;
+      let right = pointer.x + POINTER_RADIUS;
+      let top = pointer.y - POINTER_RADIUS;
+      let bottom = pointer.y + POINTER_RADIUS;
+      for (const sample of samples) {
+        left = Math.min(left, sample.x - TRAIL_RADIUS);
+        right = Math.max(right, sample.x + TRAIL_RADIUS);
+        top = Math.min(top, sample.y - TRAIL_RADIUS);
+        bottom = Math.max(bottom, sample.y + TRAIL_RADIUS);
+      }
+
       for (const cell of cells) {
+        if (cell.x < left || cell.x > right || cell.y < top || cell.y > bottom) continue;
         let influence = 0;
         const pointerDistanceSquared = distanceSquared(cell, pointer);
         const pointerFalloff = 1 - pointerDistanceSquared / POINTER_RADIUS ** 2;
         if (pointerFalloff > 0) influence = cursorEnergy * pointerFalloff ** 2;
 
-        for (const sample of trail) {
-          const age = time - sample.time;
-          if (age < 0 || age >= TRAIL_LIFETIME_MS) continue;
+        for (const sample of samples) {
           const falloff = 1 - distanceSquared(cell, sample) / TRAIL_RADIUS ** 2;
           if (falloff <= 0) continue;
-          const ageFade = (1 - age / TRAIL_LIFETIME_MS) ** 1.7;
-          influence = Math.max(influence, sample.strength * ageFade * falloff ** 2 * 0.88);
+          influence = Math.max(influence, sample.strength * falloff ** 2);
         }
+        if (influence <= 0.035) continue;
 
         const level = Math.min(
           ASCII_RAMP.length - 1,
           Math.floor(cell.density * (ASCII_RAMP.length - 1) + influence * 5),
         );
         const glyph = ASCII_RAMP[level];
-        const fontSize = 10 + influence * 7.5;
-        const alpha = cell.seed < 0.28 && influence < 0.14
-          ? 0
-          : 0.11 + cell.seed * 0.05 + influence * 0.84;
-
-        context.font = `${fontSize.toFixed(1)}px "Cascadia Mono", Consolas, monospace`;
-        if (influence > 0.035) {
-          const hue = isDark ? 34 + cell.seed * 34 : 188 + cell.seed * 94;
-          const lightness = isDark ? 62 : 43 + cell.seed * 12;
-          context.fillStyle = `hsla(${hue}, 92%, ${lightness}%, ${Math.min(alpha, 0.96)})`;
-          context.shadowColor = `hsla(${hue}, 94%, ${lightness + 8}%, 0.6)`;
-          context.shadowBlur = influence * 5;
-        } else {
-          context.fillStyle = isDark
-            ? `rgba(198, 205, 222, ${alpha})`
-            : `rgba(53, 66, 92, ${alpha})`;
-          context.shadowBlur = 0;
-        }
+        const fontSize = BASE_FONT_SIZE + influence * 5;
+        const hue = isDark ? 34 + cell.seed * 34 : 188 + cell.seed * 94;
+        const lightness = isDark ? 62 : 43 + cell.seed * 12;
+        context.font = `${fontSize.toFixed(1)}px ${FONT_FAMILY}`;
+        context.fillStyle = `hsla(${hue}, 92%, ${lightness}%, ${influence * 0.84})`;
+        context.shadowColor = `hsla(${hue}, 94%, ${lightness + 8}%, 0.6)`;
+        context.shadowBlur = influence * 4;
         context.fillText(glyph, cell.x, cell.y);
       }
       context.shadowBlur = 0;
@@ -155,6 +186,7 @@ export function MouseGlowBackground() {
       width = rect.width;
       height = rect.height;
       cells = createGlyphCells(width, height);
+      paintBackground = true;
       pointer = { x: width / 2, y: height / 2 };
       previousPointer = { ...pointer };
       draw(performance.now());
@@ -165,6 +197,7 @@ export function MouseGlowBackground() {
         window.cancelAnimationFrame(frameId);
         frameId = 0;
       }
+      paintBackground = true;
       draw(performance.now());
     };
 
@@ -199,14 +232,14 @@ export function MouseGlowBackground() {
 function createGlyphCells(width: number, height: number): GlyphCell[] {
   const cells: GlyphCell[] = [];
   let row = 0;
-  for (let y = 12; y < height; y += CELL_HEIGHT, row += 1) {
+  for (let y = CELL_HEIGHT / 2; y < height; y += CELL_HEIGHT, row += 1) {
     let column = 0;
     const offset = row % 2 === 0 ? 0 : CELL_WIDTH / 2;
-    for (let x = 10 + offset; x < width; x += CELL_WIDTH, column += 1) {
+    for (let x = CELL_WIDTH / 2 + offset; x < width; x += CELL_WIDTH, column += 1) {
       const seed = hash(column, row);
       const texture = 0.5 + Math.sin(column * 0.19 + row * 0.11) * 0.2;
       const density = clamp(texture * 0.55 + seed * 0.55, 0, 1);
-      const glyphIndex = Math.min(ASCII_RAMP.length - 1, Math.floor(density * ASCII_RAMP.length));
+      const glyphIndex = Math.floor(density * (ASCII_RAMP.length - 1));
       cells.push({ x, y, seed, density, glyph: ASCII_RAMP[glyphIndex] });
     }
   }
