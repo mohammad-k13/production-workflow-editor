@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Workflow } from '../shared/workflow/index.ts';
+import { validateWorkflow } from '../shared/workflow-validation/index.ts';
 
 const defaultWorkflowPath = 'data/workflow.json';
 
@@ -10,7 +11,9 @@ export async function readWorkflow(
 ): Promise<Workflow | null> {
   try {
     const contents = await readFile(resolve(filePath), 'utf8');
-    return JSON.parse(contents) as Workflow;
+    const workflow: unknown = JSON.parse(contents);
+    if (!validateWorkflow(workflow).valid) throw new Error('Stored workflow has invalid data.');
+    return workflow as Workflow;
   } catch (error) {
     if (isMissingFile(error)) {
       return null;

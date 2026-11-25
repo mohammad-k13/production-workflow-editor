@@ -18,3 +18,5 @@ export type Workflow = {
   steps: WorkflowStep[];
   connections: WorkflowConnection[];
 };
+
+export const workflowVersionHeader = 'x-workflow-version';

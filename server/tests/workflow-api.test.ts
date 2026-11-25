@@ -3,8 +3,9 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import type { Workflow } from '../../shared/workflow/index.ts';
 import { createApp } from '../app/index.ts';
-import { createFileWorkflowRepository } from '../workflow-repository/index.ts';
+import { createFileWorkflowRepository, versionOf } from '../workflow-repository/index.ts';
 
 async function withServer<T>(run: (baseUrl: string) => Promise<T>): Promise<T> {
   const directory = await mkdtemp(join(tmpdir(), 'workflow-api-'));
@@ -26,6 +27,22 @@ const validWorkflow = {
   connections: [],
 };
 
+async function getVersion(url: string) {
+  const response = await fetch(url);
+  assert.equal(response.status, 200);
+  const body = await response.json() as { version: string };
+  assert.match(body.version, /^[0-9a-f]{64}$/);
+  return body.version;
+}
+
+function putWorkflow(url: string, workflow: Workflow, version: string) {
+  return fetch(url, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-workflow-version': version },
+    body: JSON.stringify(workflow),
+  });
+}
+
 test('lists the two stable workflows and serves the initial example when no save exists', async () => {
   await withServer(async (baseUrl) => {
     const list = await fetch(`${baseUrl}/api/workflows`);
@@ -42,22 +59,68 @@ test('lists the two stable workflows and serves the initial example when no save
     const body = await response.json() as { id: string; workflow: typeof validWorkflow };
     assert.equal(body.id, 'example');
     assert.equal(body.workflow.steps.length, 3);
+    const large = await fetch(`${baseUrl}/api/workflows/large`);
+    assert.equal(large.status, 200);
+    const { workflow } = await large.json() as { workflow: typeof validWorkflow };
+    assert.equal(workflow.steps.length, 100);
+    assert.equal(workflow.connections.length, 200);
   });
 });
 
 test('saves a valid workflow and returns it on a later read', async () => {
   await withServer(async (baseUrl) => {
-    const save = await fetch(`${baseUrl}/api/workflows/example`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(validWorkflow),
-    });
+    const url = `${baseUrl}/api/workflows/example`;
+    const version = await getVersion(url);
+    const workflow = {
+      steps: [
+        { id: 'assemble', name: 'Assemble', durationMinutes: 14.5, position: { x: 123, y: -50 } },
+        { id: 'pack', name: 'Pack', durationMinutes: 8, position: { x: 200, y: 40 } },
+      ],
+      connections: [{ id: 'a-p', fromStepId: 'assemble', toStepId: 'pack' }],
+    };
+    const save = await putWorkflow(url, workflow, version);
     assert.equal(save.status, 200);
-    assert.deepEqual(await save.json(), { id: 'example', revision: 1, status: 'saved' });
+    const saved = await save.json() as { version: string; status: string };
+    assert.equal(saved.status, 'saved');
+    assert.notEqual(saved.version, version);
+    assert.equal(saved.version, await getVersion(url));
 
     const read = await fetch(`${baseUrl}/api/workflows/example`);
     const body = await read.json() as { workflow: typeof validWorkflow };
-    assert.deepEqual(body.workflow, validWorkflow);
+    assert.deepEqual(body.workflow, workflow);
+  });
+});
+
+test('only one client can commit against the same starting version', async () => {
+  await withServer(async (baseUrl) => {
+    const url = `${baseUrl}/api/workflows/example`;
+    const version = await getVersion(url);
+    const alternatives = ['First editor', 'Second editor'].map((name) => ({
+      steps: [{ ...validWorkflow.steps[0], name }],
+      connections: [],
+    }));
+    const responses = await Promise.all(alternatives.map((choice) => putWorkflow(url, choice, version)));
+    assert.deepEqual(responses.map((response) => response.status).sort(), [200, 409]);
+    const winner = responses.findIndex((response) => response.status === 200);
+    const conflict = await responses[1 - winner].json() as { error: { code: string }; version: string };
+    assert.equal(conflict.error.code, 'WORKFLOW_CONFLICT');
+    assert.equal(conflict.version, await getVersion(url));
+    const current = await fetch(url).then((response) => response.json()) as { workflow: typeof validWorkflow };
+    assert.deepEqual(current.workflow, alternatives[winner]);
+    const explicitReplacement = await putWorkflow(url, alternatives[1 - winner], conflict.version);
+    assert.equal(explicitReplacement.status, 200);
+  });
+});
+
+test('requires a version for a valid save and leaves the workflow unchanged without one', async () => {
+  await withServer(async (baseUrl) => {
+    const url = `${baseUrl}/api/workflows/example`;
+    const version = await getVersion(url);
+    const response = await fetch(url, {
+      method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(validWorkflow),
+    });
+    assert.equal(response.status, 428);
+    assert.equal(await getVersion(url), version);
   });
 });
 
@@ -157,6 +220,7 @@ test('saved workflows survive repository recreation and remain isolated by ID', 
   const directory = await mkdtemp(join(tmpdir(), 'workflow-persistence-'));
   try {
     const firstRepository = createFileWorkflowRepository(directory);
+    const previousVersion = versionOf(await firstRepository.read('example'));
     const customExample = { ...validWorkflow, steps: [{ ...validWorkflow.steps[0], name: 'Persisted example' }] };
     const customLarge = { ...validWorkflow, steps: [{ ...validWorkflow.steps[0], name: 'Persisted large' }] };
     await firstRepository.save('example', customExample);
@@ -164,6 +228,10 @@ test('saved workflows survive repository recreation and remain isolated by ID', 
     const secondRepository = createFileWorkflowRepository(directory);
     assert.deepEqual(await secondRepository.read('example'), customExample);
     assert.deepEqual(await secondRepository.read('large'), customLarge);
+    const staleSave = await secondRepository.save('example', customLarge, previousVersion);
+    assert.equal(staleSave.conflict, true);
+    assert.equal(staleSave.version, versionOf(customExample));
+    assert.deepEqual(await secondRepository.read('example'), customExample);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -210,9 +278,8 @@ test('storage errors return a generic API error and do not reveal filesystem det
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('Expected a TCP server address.');
     try {
-      const response = await fetch(`http://127.0.0.1:${address.port}/api/workflows/example`, {
-        method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(validWorkflow),
-      });
+      const url = `http://127.0.0.1:${address.port}/api/workflows/example`;
+      const response = await putWorkflow(url, validWorkflow, await getVersion(url));
       assert.equal(response.status, 500);
       const errorBody = await response.text();
       assert.ok(errorBody.includes('INTERNAL_ERROR'));

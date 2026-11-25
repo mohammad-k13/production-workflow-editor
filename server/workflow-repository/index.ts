@@ -1,14 +1,20 @@
+import { createHash } from 'node:crypto';
 import type { Workflow } from '../../shared/workflow/index.ts';
 import { readWorkflow, writeWorkflow } from '../workflow-file.ts';
 import { workflowRegistry, type WorkflowId } from '../workflow-registry/index.ts';
 
 export type WorkflowMetadata = { id: WorkflowId; name: string };
-export type SaveResult = { revision: number; saved: boolean };
+export type SaveResult = { revision: number; saved: boolean; version?: string; conflict?: true };
+
+export function versionOf(workflow: Workflow): string {
+  return createHash('sha256').update(JSON.stringify(workflow)).digest('hex');
+}
 
 export interface WorkflowRepository {
   list(): WorkflowMetadata[];
+  revision(id: WorkflowId): number;
   read(id: WorkflowId): Promise<Workflow>;
-  save(id: WorkflowId, workflow: Workflow): Promise<SaveResult>;
+  save(id: WorkflowId, workflow: Workflow, expectedVersion?: string): Promise<SaveResult>;
 }
 
 type AtomicWriter = (
@@ -22,8 +28,12 @@ export function createFileWorkflowRepository(
   atomicWriter: AtomicWriter = writeWorkflow,
 ): WorkflowRepository {
   const nextRevision = new Map<WorkflowId, number>();
+  const committedRevision = new Map<WorkflowId, number>();
   const latestRevision = new Map<WorkflowId, number>();
   const pendingWrites = new Map<WorkflowId, Promise<void>>();
+  const pathFor = (id: WorkflowId) => `${directory}/${id}.json`;
+  const read = async (id: WorkflowId) =>
+    await readWorkflow(pathFor(id)) ?? workflowRegistry[id].initialWorkflow;
 
   return {
     list: () =>
@@ -32,33 +42,35 @@ export function createFileWorkflowRepository(
         name: workflowRegistry[id].name,
       })),
 
-    async read(id) {
-      const stored = await readWorkflow(`${directory}/${id}.json`);
-      return stored ?? workflowRegistry[id].initialWorkflow;
-    },
+    revision: (id) => committedRevision.get(id) ?? 0,
 
-    async save(id, workflow) {
+    read,
+
+    async save(id, workflow, expectedVersion) {
       const revision = (nextRevision.get(id) ?? 0) + 1;
       nextRevision.set(id, revision);
-      latestRevision.set(id, revision);
+      if (expectedVersion === undefined) latestRevision.set(id, revision);
       const previousWrite = pendingWrites.get(id) ?? Promise.resolve();
-      let committed = false;
-      const write = previousWrite.catch(() => undefined).then(async () => {
-        // Drop queued saves as soon as a newer request has arrived.
-        if (latestRevision.get(id) !== revision) return;
-        committed = await atomicWriter(
-          workflow,
-          `${directory}/${id}.json`,
-          () => latestRevision.get(id) === revision,
-        );
+      const canCommit = () => expectedVersion !== undefined || latestRevision.get(id) === revision;
+      const write = previousWrite.catch(() => undefined).then(async (): Promise<SaveResult> => {
+        if (!canCommit()) return { revision, saved: false };
+        // Compare and write under the same per-workflow queue so no other save
+        // can change the base document between these two operations.
+        if (expectedVersion !== undefined) {
+          const version = versionOf(await read(id));
+          if (version !== expectedVersion) return { revision, saved: false, conflict: true, version };
+        }
+        const committed = await atomicWriter(workflow, pathFor(id), canCommit);
+        if (committed) committedRevision.set(id, revision);
+        return { revision, saved: committed && canCommit(), version: committed ? versionOf(workflow) : undefined };
       });
-      pendingWrites.set(id, write);
+      const pending = write.then(() => undefined, () => undefined);
+      pendingWrites.set(id, pending);
       try {
-        await write;
+        return await write;
       } finally {
-        if (pendingWrites.get(id) === write) pendingWrites.delete(id);
+        if (pendingWrites.get(id) === pending) pendingWrites.delete(id);
       }
-      return { revision, saved: committed && latestRevision.get(id) === revision };
     },
   };
 }
