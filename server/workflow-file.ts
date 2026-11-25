@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import type { Workflow } from '../shared/workflow.ts';
+import type { Workflow } from '../shared/workflow/index.ts';
 
 const defaultWorkflowPath = 'data/workflow.json';
 

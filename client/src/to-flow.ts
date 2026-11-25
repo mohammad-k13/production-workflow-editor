@@ -1,5 +1,5 @@
 import { MarkerType, Position, type Edge, type Node } from "@xyflow/react";
-import type { Workflow } from "../../shared/workflow.ts";
+import type { Workflow } from "../../shared/workflow/index.ts";
 import type { StepNodeData } from "./StepNode.tsx";
 
 export function workflowToFlow(workflow: Workflow): {
