@@ -6,16 +6,68 @@ body,
 }
 
 body {
-  background: #f8fafc;
+  background: #f7faff;
   font-family: system-ui, sans-serif;
 }
 
 .react-flow {
-  background: #f8fafc;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: transparent;
 }
 
 .workflow-editor {
+  position: relative;
   height: 100%;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.mouse-glow-background {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(209, 223, 255, 0.42), transparent 54%),
+    linear-gradient(145deg, #f7faff 0%, #f5f8ff 52%, #fbfcff 100%);
+}
+
+.mouse-glow-background__orb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: min(72vw, 620px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(83, 125, 239, 0.28) 0%,
+    rgba(101, 143, 250, 0.2) 19%,
+    rgba(123, 159, 247, 0.105) 43%,
+    rgba(140, 170, 245, 0.045) 61%,
+    rgba(140, 170, 245, 0) 73%
+  );
+  filter: blur(10px);
+  will-change: transform;
+}
+
+.mouse-glow-background__grain,
+.mouse-glow-background__vignette {
+  position: absolute;
+  inset: 0;
+}
+
+.mouse-glow-background__grain {
+  opacity: 0.17;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.18' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+}
+
+.mouse-glow-background__vignette {
+  background: radial-gradient(ellipse at center, transparent 54%, rgba(48, 76, 133, 0.055) 100%);
 }
 
 .step-node {

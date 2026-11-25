@@ -2,6 +2,7 @@ import { Background, ReactFlow } from "@xyflow/react";
 import { exampleWorkflow } from "../../shared/example-workflow.ts";
 import { StepNodeView } from "./StepNode.tsx";
 import { workflowToFlow } from "./to-flow.ts";
+import { MouseGlowBackground } from "./components/ui/MouseGlowBackground.tsx";
 import "@xyflow/react/dist/style.css";
 
 const nodeTypes = { step: StepNodeView };
@@ -10,6 +11,7 @@ const { nodes, edges } = workflowToFlow(exampleWorkflow);
 export function App() {
   return (
     <main className="workflow-editor" aria-label="Workflow">
+      <MouseGlowBackground />
       <ReactFlow
         nodes={nodes}
         edges={edges}
