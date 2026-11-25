@@ -1,5 +1,6 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { Workflow } from '../shared/workflow/index.ts';
 
 const defaultWorkflowPath = 'data/workflow.json';
@@ -21,10 +22,23 @@ export async function readWorkflow(
 export async function writeWorkflow(
   workflow: Workflow,
   filePath = defaultWorkflowPath,
-): Promise<void> {
+  shouldCommit: () => boolean = () => true,
+): Promise<boolean> {
   const resolvedPath = resolve(filePath);
   await mkdir(dirname(resolvedPath), { recursive: true });
-  await writeFile(resolvedPath, `${JSON.stringify(workflow, null, 2)}\n`, 'utf8');
+  const temporaryPath = `${resolvedPath}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(workflow, null, 2)}\n`, 'utf8');
+    if (!shouldCommit()) {
+      await rm(temporaryPath, { force: true });
+      return false;
+    }
+    await rename(temporaryPath, resolvedPath);
+    return true;
+  } catch (error) {
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }
 
 function isMissingFile(error: unknown): boolean {
