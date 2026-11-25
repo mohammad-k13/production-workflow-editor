@@ -18,7 +18,12 @@ export function createWorkflowRouter(repository: WorkflowRepository): Router {
       return;
     }
     try {
-      response.json({ id, name: repository.list().find((item) => item.id === id)?.name, workflow: await repository.read(id) });
+      response.json({
+        id,
+        name: repository.list().find((item) => item.id === id)?.name,
+        revision: repository.revision(id),
+        workflow: await repository.read(id),
+      });
     } catch (error) {
       next(error);
     }

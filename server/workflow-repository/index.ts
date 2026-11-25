@@ -7,6 +7,7 @@ export type SaveResult = { revision: number; saved: boolean };
 
 export interface WorkflowRepository {
   list(): WorkflowMetadata[];
+  revision(id: WorkflowId): number;
   read(id: WorkflowId): Promise<Workflow>;
   save(id: WorkflowId, workflow: Workflow): Promise<SaveResult>;
 }
@@ -22,6 +23,7 @@ export function createFileWorkflowRepository(
   atomicWriter: AtomicWriter = writeWorkflow,
 ): WorkflowRepository {
   const nextRevision = new Map<WorkflowId, number>();
+  const committedRevision = new Map<WorkflowId, number>();
   const latestRevision = new Map<WorkflowId, number>();
   const pendingWrites = new Map<WorkflowId, Promise<void>>();
 
@@ -31,6 +33,8 @@ export function createFileWorkflowRepository(
         id,
         name: workflowRegistry[id].name,
       })),
+
+    revision: (id) => committedRevision.get(id) ?? 0,
 
     async read(id) {
       const stored = await readWorkflow(`${directory}/${id}.json`);
@@ -51,6 +55,7 @@ export function createFileWorkflowRepository(
           `${directory}/${id}.json`,
           () => latestRevision.get(id) === revision,
         );
+        if (committed) committedRevision.set(id, revision);
       });
       pendingWrites.set(id, write);
       try {

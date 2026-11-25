@@ -15,6 +15,7 @@ coverage/
 
 # Runtime workflow document
 data/workflow.json
+data/workflows/
 *.log
 
 # macOS

@@ -1,207 +1,187 @@
 import { useEffect, useRef } from 'react';
 
 type Point = { x: number; y: number };
-type GlyphParticle = {
-  homeX: number;
-  homeY: number;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  density: number;
-  phase: number;
-  glyph: string;
-};
+type GlyphCell = Point & { glyph: string; seed: number; density: number };
+type TrailPoint = Point & { time: number; strength: number };
 
-const FIELD_SIZE = 700;
-const FIELD_RADIUS_X = 276;
-const FIELD_RADIUS_Y = 222;
-const CELL_WIDTH = 11;
-const CELL_HEIGHT = 16;
+const CELL_WIDTH = 18;
+const CELL_HEIGHT = 24;
 const ASCII_RAMP = '.,:;!+=*#%@';
-const POINTER_RADIUS = 112;
+const POINTER_RADIUS = 52;
+const TRAIL_RADIUS = 62;
+const TRAIL_LIFETIME_MS = 460;
+const MAX_TRAIL_POINTS = 22;
 
-/** Draws a living ASCII field whose loose glyphs react to and trail the pointer. */
+/** A full-page ASCII field with a short, colored glyph trail around the pointer. */
 export function MouseGlowBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fieldRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const field = fieldRef.current;
+    const container = canvas?.parentElement;
     const context = canvas?.getContext('2d');
-    if (!canvas || !field || !context) return;
-    const container = field.parentElement;
-    if (!container) return;
+    if (!canvas || !container || !context) return;
 
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const darkMode = window.matchMedia('(prefers-color-scheme: dark)');
-    const initialBounds = container.getBoundingClientRect();
-    const position: Point = { x: initialBounds.width / 2, y: initialBounds.height / 2 };
-    const target: Point = { ...position };
-    const velocity: Point = { x: 0, y: 0 };
-    const lastPointer: Point = { ...position };
-    const pointerPulse = { x: position.x, y: position.y, dirX: 0, dirY: 0, strength: 0 };
-    const particles = createGlyphParticles();
+    const bounds = container.getBoundingClientRect();
+    let width = bounds.width;
+    let height = bounds.height;
+    let cells = createGlyphCells(width, height);
+    let pointer: Point = { x: width / 2, y: height / 2 };
+    let previousPointer = { ...pointer };
+    let cursorEnergy = 0;
+    let trail: TrailPoint[] = [];
     let frameId = 0;
     let previousTime = 0;
 
     const draw = (time: number) => {
-      const isReducedMotion = reducedMotion.matches;
       const isDark = darkMode.matches;
-      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-      const pixelWidth = Math.round(FIELD_SIZE * pixelRatio);
-      if (canvas.width !== pixelWidth || canvas.height !== pixelWidth) {
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
+      const pixelWidth = Math.round(width * pixelRatio);
+      const pixelHeight = Math.round(height * pixelRatio);
+      if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
         canvas.width = pixelWidth;
-        canvas.height = pixelWidth;
+        canvas.height = pixelHeight;
         context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
       }
 
-      field.style.transform = `translate3d(${position.x}px, ${position.y}px, 0) translate(-50%, -50%)`;
-      context.clearRect(0, 0, FIELD_SIZE, FIELD_SIZE);
-      context.save();
-      context.translate(FIELD_SIZE / 2, FIELD_SIZE / 2);
-      context.font = '12px "Cascadia Mono", Consolas, monospace';
+      context.clearRect(0, 0, width, height);
       context.textAlign = 'center';
       context.textBaseline = 'middle';
-      context.shadowColor = isDark ? 'rgba(255, 191, 73, .5)' : 'rgba(91, 132, 236, .42)';
-      context.shadowBlur = 4;
+      for (const cell of cells) {
+        let influence = 0;
+        const pointerDistanceSquared = distanceSquared(cell, pointer);
+        const pointerFalloff = 1 - pointerDistanceSquared / POINTER_RADIUS ** 2;
+        if (pointerFalloff > 0) influence = cursorEnergy * pointerFalloff ** 2;
 
-      for (const particle of particles) {
-        const idleDrift = isReducedMotion ? 0 : Math.sin(time * 0.0009 + particle.phase) * 1.6;
-        const x = particle.x + idleDrift;
-        const y = particle.y + Math.cos(time * 0.00075 + particle.phase) * (isReducedMotion ? 0 : 1.2);
-        const displacement = Math.hypot(particle.x - particle.homeX, particle.y - particle.homeY);
-        const returnFade = clamp(1 - displacement / 190, 0.24, 1);
-        const alpha = (0.12 + particle.density * 0.78) * returnFade;
-
-        context.fillStyle = isDark
-          ? `rgba(242, 180, 58, ${alpha})`
-          : `rgba(57, 86, 163, ${alpha})`;
-        context.fillText(particle.glyph, x, y);
-      }
-      context.restore();
-    };
-
-    const animate = (time: number) => {
-      const frameScale = previousTime === 0 ? 1 : Math.min((time - previousTime) / 16.667, 2);
-      previousTime = time;
-
-      // The dense center follows more slowly, so the pointer can move through it.
-      velocity.x = (velocity.x + (target.x - position.x) * 0.045 * frameScale) * Math.pow(0.82, frameScale);
-      velocity.y = (velocity.y + (target.y - position.y) * 0.045 * frameScale) * Math.pow(0.82, frameScale);
-      position.x += velocity.x * frameScale;
-      position.y += velocity.y * frameScale;
-
-      const pulse = pointerPulse.strength;
-      for (const particle of particles) {
-        const ambientX = particle.homeX + Math.sin(time * 0.0009 + particle.phase) * 1.6;
-        const ambientY = particle.homeY + Math.cos(time * 0.00075 + particle.phase) * 1.2;
-        particle.vx += (ambientX - particle.x) * 0.012 * frameScale;
-        particle.vy += (ambientY - particle.y) * 0.012 * frameScale;
-
-        if (pulse > 0.05) {
-          const worldX = position.x + particle.x;
-          const worldY = position.y + particle.y;
-          const awayX = worldX - pointerPulse.x;
-          const awayY = worldY - pointerPulse.y;
-          const distance = Math.hypot(awayX, awayY);
-          if (distance < POINTER_RADIUS) {
-            const falloff = (1 - distance / POINTER_RADIUS) ** 2;
-            const radialX = distance === 0 ? -pointerPulse.dirX : awayX / distance;
-            const radialY = distance === 0 ? -pointerPulse.dirY : awayY / distance;
-            const kick = pulse * falloff * 0.11 * frameScale;
-            particle.vx += (radialX * 0.9 + pointerPulse.dirX * 0.65) * kick;
-            particle.vy += (radialY * 0.9 + pointerPulse.dirY * 0.65) * kick;
-          }
+        for (const sample of trail) {
+          const age = time - sample.time;
+          if (age < 0 || age >= TRAIL_LIFETIME_MS) continue;
+          const falloff = 1 - distanceSquared(cell, sample) / TRAIL_RADIUS ** 2;
+          if (falloff <= 0) continue;
+          const ageFade = (1 - age / TRAIL_LIFETIME_MS) ** 1.7;
+          influence = Math.max(influence, sample.strength * ageFade * falloff ** 2 * 0.88);
         }
 
-        particle.vx *= Math.pow(0.84, frameScale);
-        particle.vy *= Math.pow(0.84, frameScale);
-        particle.x += particle.vx * frameScale;
-        particle.y += particle.vy * frameScale;
+        const level = Math.min(
+          ASCII_RAMP.length - 1,
+          Math.floor(cell.density * (ASCII_RAMP.length - 1) + influence * 5),
+        );
+        const glyph = ASCII_RAMP[level];
+        const fontSize = 10 + influence * 7.5;
+        const alpha = cell.seed < 0.28 && influence < 0.14
+          ? 0
+          : 0.11 + cell.seed * 0.05 + influence * 0.84;
+
+        context.font = `${fontSize.toFixed(1)}px "Cascadia Mono", Consolas, monospace`;
+        if (influence > 0.035) {
+          const hue = isDark ? 34 + cell.seed * 34 : 188 + cell.seed * 94;
+          const lightness = isDark ? 62 : 43 + cell.seed * 12;
+          context.fillStyle = `hsla(${hue}, 92%, ${lightness}%, ${Math.min(alpha, 0.96)})`;
+          context.shadowColor = `hsla(${hue}, 94%, ${lightness + 8}%, 0.6)`;
+          context.shadowBlur = influence * 5;
+        } else {
+          context.fillStyle = isDark
+            ? `rgba(198, 205, 222, ${alpha})`
+            : `rgba(53, 66, 92, ${alpha})`;
+          context.shadowBlur = 0;
+        }
+        context.fillText(glyph, cell.x, cell.y);
       }
-      pointerPulse.strength *= Math.pow(0.84, frameScale);
+      context.shadowBlur = 0;
+    };
+
+    const animateTrail = (time: number) => {
+      const frameScale = previousTime === 0 ? 1 : Math.min((time - previousTime) / 16.667, 2);
+      previousTime = time;
+      cursorEnergy *= Math.pow(0.94, frameScale);
+      trail = trail.filter((sample) => time - sample.time < TRAIL_LIFETIME_MS);
       draw(time);
-      frameId = window.requestAnimationFrame(animate);
+
+      if (cursorEnergy < 0.015 && trail.length === 0) {
+        cursorEnergy = 0;
+        draw(time);
+        frameId = 0;
+        return;
+      }
+      frameId = window.requestAnimationFrame(animateTrail);
+    };
+
+    const startTrailAnimation = () => {
+      if (reducedMotion.matches || frameId !== 0) return;
+      previousTime = 0;
+      frameId = window.requestAnimationFrame(animateTrail);
     };
 
     const onPointerMove = (event: PointerEvent) => {
-      const bounds = container.getBoundingClientRect();
-      const pointerX = clamp(event.clientX - bounds.left, 0, bounds.width);
-      const pointerY = clamp(event.clientY - bounds.top, 0, bounds.height);
-      const dx = pointerX - lastPointer.x;
-      const dy = pointerY - lastPointer.y;
+      const rect = container.getBoundingClientRect();
+      const next = {
+        x: clamp(event.clientX - rect.left, 0, rect.width),
+        y: clamp(event.clientY - rect.top, 0, rect.height),
+      };
+      const dx = next.x - previousPointer.x;
+      const dy = next.y - previousPointer.y;
       const distance = Math.hypot(dx, dy);
-      target.x = pointerX;
-      target.y = pointerY;
+      pointer = next;
 
-      if (distance > 0.3) {
-        pointerPulse.x = pointerX;
-        pointerPulse.y = pointerY;
-        pointerPulse.dirX = dx / distance;
-        pointerPulse.dirY = dy / distance;
-        pointerPulse.strength = Math.min(38, pointerPulse.strength + Math.min(distance, 80) * 0.52);
-        lastPointer.x = pointerX;
-        lastPointer.y = pointerY;
+      if (distance > 2) {
+        const segments = Math.min(18, Math.max(1, Math.ceil(distance / 5)));
+        const strength = clamp(0.42 + distance / 72, 0.42, 1);
+        const now = performance.now();
+        for (let index = 1; index <= segments; index += 1) {
+          const progress = index / segments;
+          trail.push({
+            x: previousPointer.x + dx * progress,
+            y: previousPointer.y + dy * progress,
+            time: now - (segments - index) * 2,
+            strength,
+          });
+        }
+        if (trail.length > MAX_TRAIL_POINTS) trail = trail.slice(-MAX_TRAIL_POINTS);
+        cursorEnergy = Math.max(cursorEnergy, strength);
+        previousPointer = next;
       }
 
       if (reducedMotion.matches) {
-        position.x = target.x;
-        position.y = target.y;
-        resetParticles(particles);
         draw(performance.now());
-      } else if (frameId === 0) {
-        previousTime = 0;
-        frameId = window.requestAnimationFrame(animate);
+      } else {
+        startTrailAnimation();
       }
+    };
+
+    const resizeCanvas = () => {
+      const rect = container.getBoundingClientRect();
+      width = rect.width;
+      height = rect.height;
+      cells = createGlyphCells(width, height);
+      pointer = { x: width / 2, y: height / 2 };
+      previousPointer = { ...pointer };
+      draw(performance.now());
     };
 
     const onPreferenceChange = () => {
       if (reducedMotion.matches) {
         window.cancelAnimationFrame(frameId);
         frameId = 0;
-        position.x = target.x;
-        position.y = target.y;
-        velocity.x = 0;
-        velocity.y = 0;
-        pointerPulse.strength = 0;
-        resetParticles(particles);
-        draw(performance.now());
-      } else if (frameId === 0) {
-        previousTime = 0;
-        frameId = window.requestAnimationFrame(animate);
-      } else {
-        draw(performance.now());
       }
-    };
-
-    const onResize = () => {
-      const bounds = container.getBoundingClientRect();
-      target.x = bounds.width / 2;
-      target.y = bounds.height / 2;
-      if (reducedMotion.matches) {
-        position.x = target.x;
-        position.y = target.y;
-        draw(performance.now());
-      } else if (frameId === 0) {
-        previousTime = 0;
-        frameId = window.requestAnimationFrame(animate);
-      }
+      draw(performance.now());
     };
 
     draw(performance.now());
-    if (!reducedMotion.matches) frameId = window.requestAnimationFrame(animate);
     window.addEventListener('pointermove', onPointerMove, { passive: true });
-    window.addEventListener('resize', onResize);
+    window.addEventListener('resize', resizeCanvas);
     reducedMotion.addEventListener('change', onPreferenceChange);
     darkMode.addEventListener('change', onPreferenceChange);
+    const resizeObserver = new ResizeObserver(resizeCanvas);
+    resizeObserver.observe(container);
 
     return () => {
       window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('resize', onResize);
+      window.removeEventListener('resize', resizeCanvas);
       reducedMotion.removeEventListener('change', onPreferenceChange);
       darkMode.removeEventListener('change', onPreferenceChange);
+      resizeObserver.disconnect();
       window.cancelAnimationFrame(frameId);
     };
   }, []);
@@ -209,55 +189,34 @@ export function MouseGlowBackground() {
   return (
     <div className="ascii-background" aria-hidden="true">
       <div className="ascii-background__ambient" />
-      <div ref={fieldRef} className="ascii-background__field">
-        <canvas ref={canvasRef} width={FIELD_SIZE} height={FIELD_SIZE} />
-      </div>
+      <canvas ref={canvasRef} className="ascii-background__canvas" />
       <div className="ascii-background__grain" />
       <div className="ascii-background__vignette" />
     </div>
   );
 }
 
-function createGlyphParticles(): GlyphParticle[] {
-  const particles: GlyphParticle[] = [];
-  for (let y = -FIELD_RADIUS_Y; y <= FIELD_RADIUS_Y; y += CELL_HEIGHT) {
-    for (let x = -FIELD_RADIUS_X; x <= FIELD_RADIUS_X; x += CELL_WIDTH) {
-      const distance = Math.hypot(x / FIELD_RADIUS_X, y / FIELD_RADIUS_Y);
-      const angle = Math.atan2(y, x);
-      const boundary = 1
-        + Math.sin(angle * 2.7 + 0.4) * 0.055
-        + Math.cos(angle * 5.2 - 0.7) * 0.035
-        + Math.sin(angle * 8 + 1.2) * 0.018;
-      if (distance > boundary) continue;
-
-      const phase = hash(x, y) * Math.PI * 2;
-      const density = clamp((boundary - distance) * 2.6 + (hash(y, x) - 0.5) * 0.16, 0, 1);
+function createGlyphCells(width: number, height: number): GlyphCell[] {
+  const cells: GlyphCell[] = [];
+  let row = 0;
+  for (let y = 12; y < height; y += CELL_HEIGHT, row += 1) {
+    let column = 0;
+    const offset = row % 2 === 0 ? 0 : CELL_WIDTH / 2;
+    for (let x = 10 + offset; x < width; x += CELL_WIDTH, column += 1) {
+      const seed = hash(column, row);
+      const texture = 0.5 + Math.sin(column * 0.19 + row * 0.11) * 0.2;
+      const density = clamp(texture * 0.55 + seed * 0.55, 0, 1);
       const glyphIndex = Math.min(ASCII_RAMP.length - 1, Math.floor(density * ASCII_RAMP.length));
-      const homeX = x + Math.sin(y * 0.022 + phase) * 2.4;
-      const homeY = y + Math.cos(x * 0.019 + phase) * 2;
-      particles.push({
-        homeX,
-        homeY,
-        x: homeX,
-        y: homeY,
-        vx: 0,
-        vy: 0,
-        density,
-        phase,
-        glyph: ASCII_RAMP[glyphIndex],
-      });
+      cells.push({ x, y, seed, density, glyph: ASCII_RAMP[glyphIndex] });
     }
   }
-  return particles;
+  return cells;
 }
 
-function resetParticles(particles: GlyphParticle[]): void {
-  for (const particle of particles) {
-    particle.x = particle.homeX;
-    particle.y = particle.homeY;
-    particle.vx = 0;
-    particle.vy = 0;
-  }
+function distanceSquared(first: Point, second: Point): number {
+  const dx = first.x - second.x;
+  const dy = first.y - second.y;
+  return dx * dx + dy * dy;
 }
 
 function hash(x: number, y: number): number {
