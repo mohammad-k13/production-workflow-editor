@@ -6,7 +6,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import type { WorkflowSchedule } from '../../../shared/workflow-schedule/index.ts';
 import type { Workflow } from '../../../shared/workflow/index.ts';
-import { formatMinutes } from '../formatMinutes.ts';
+import { formatDuration, formatMinutes } from '../formatMinutes.ts';
 
 type StepNodeData = {
   name: string;
@@ -30,13 +30,30 @@ function StepCard({ data, selected }: NodeProps<StepNode>) {
         {data.critical && <span>Critical path</span>}
       </div>
       <strong className="step-node__name" title={data.name}>{data.name || 'Unnamed step'}</strong>
-      <span className="step-node__duration">{formatMinutes(data.durationMinutes)} · duration</span>
+      <span className="step-node__duration" title={formatMinutes(data.durationMinutes)}>
+        {formatDuration(data.durationMinutes)} · duration
+      </span>
       <dl className="step-node__timing">
-        <div><dt>Earliest start</dt><dd>{formatMinutes(data.start)}</dd></div>
-        <div><dt>Earliest finish</dt><dd>{formatMinutes(data.finish)}</dd></div>
+        <StepTiming label="Earliest start" minutes={data.start} />
+        <StepTiming label="Earliest finish" minutes={data.finish} />
       </dl>
       <Handle type="source" position={Position.Right} aria-label="Connect to dependent step" />
     </article>
+  );
+}
+
+function StepTiming({ label, minutes }: { label: string; minutes?: number }) {
+  const display = formatDuration(minutes);
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>
+        {display}
+        {minutes !== undefined && Number.isFinite(minutes) && minutes >= 60 && (
+          <small className="step-node__minutes">{formatMinutes(minutes)}</small>
+        )}
+      </dd>
+    </div>
   );
 }
 

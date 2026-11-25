@@ -14,7 +14,7 @@
     "dev:server": "node --watch server/main.ts",
     "typecheck": "tsc --noEmit -p shared/tsconfig.json && tsc --noEmit -p client/tsconfig.json && tsc --noEmit -p client/tests/tsconfig.json && tsc --noEmit -p server/tsconfig.json",
     "lint": "eslint --max-warnings 0 .",
-    "test": "node --test shared/tests/workflow-domain.test.ts server/tests/workflow-api.test.ts server/tests/workflow-file.test.ts client/tests/workflows-api.test.ts client/tests/workflowHistory.test.ts"
+    "test": "node --test shared/tests/workflow-domain.test.ts server/tests/workflow-api.test.ts server/tests/workflow-file.test.ts client/tests/workflows-api.test.ts client/tests/workflowHistory.test.ts client/tests/formatMinutes.test.ts"
   },
   "dependencies": {
     "@xyflow/react": "12.12.0",
