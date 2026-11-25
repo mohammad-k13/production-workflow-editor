@@ -14,7 +14,7 @@
     "dev:server": "node server/main.ts",
     "typecheck": "tsc --noEmit -p shared/tsconfig.json && tsc --noEmit -p client/tsconfig.json && tsc --noEmit -p server/tsconfig.json",
     "lint": "eslint --max-warnings 0 .",
-    "test": "node --test 'shared/**/*.test.ts' 'server/**/*.test.ts'"
+    "test": "node --test shared/tests/workflow-domain.test.ts server/tests/workflow-api.test.ts server/tests/workflow-file.test.ts"
   },
   "dependencies": {
     "@xyflow/react": "12.12.0",
