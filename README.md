@@ -4,7 +4,7 @@ Edit production steps and their prerequisites, then see when each step can start
 
 ## Run locally
 
-Use Node.js 24.21.0 (see `.node-version` and `.nvmrc`) and npm 11. From the project root:
+The repository pins Node.js 24.21.0 in `.node-version` and `.nvmrc`. The project also supports Node.js `^20.19.0`, `^22.13.0`, and `>=24.0.0`, as declared in `package.json`. Use npm 11. From the project root:
 
 ```sh
 npm ci
@@ -36,7 +36,7 @@ The default configuration needs no environment file. Optional shell variables ar
 - **Readability.** The graph view, step form, workflow selector, edit history and load/save session live in named modules. Tests describe workflow outcomes such as a dependent step waiting for its last prerequisite.
 - **Maintainability.** Both sides call the same validator. One workflow document drives graph rendering, calculations, persistence and undo, and repeated graph updates preserve unchanged nodes and edges.
 - **Extensibility.** Start new scheduling behavior in the shared model or scheduler and add a focused domain test. Change the client projection for new display needs or replace the repository to introduce a different storage backend.
-- **Tools.** React and TypeScript provide the typed UI, and React Flow supplies drag, viewport, and connection interactions. Axios gives the client a shared response interceptor and configurable adapter for tests. Vite runs the local client, Express handles routing and JSON, and Node's test runner covers the domain, client transport, and real HTTP requests. A small topological traversal handles scheduling without a graph dependency.
+- **Tools.** React and TypeScript provide the typed UI, and React Flow supplies drag, viewport, and connection interactions. Axios gives the client a shared response interceptor and configurable adapter for tests. Vite runs the local client, Express handles routing and JSON, and Vitest runs the TypeScript domain, client transport, and real HTTP tests without relying on Node's experimental TypeScript loader. A small topological traversal handles scheduling without a graph dependency.
 
 ## Performance verification
 
@@ -46,4 +46,4 @@ As a separate check on the scheduling logic, I warmed up the scheduler with 100 
 
 ## How I used AI
 
-I used Codex for implementation and review in small iterations, giving it the brief, the project structure, visual feedback, and the expected behavior for save conflicts and undo. For the Axios and component refactor, I separated implementation, code review, and regression tests across three agents. I reviewed changes in the running editor and used code review, automated checks, and browser verification to assess the final behavior.
+I used OpenAI Codex as a coding assistant. I gave it the assignment brief and repository context, then asked it to diagnose why the TypeScript tests did not start and migrate the suite to Vitest while preserving the existing test behavior. I reviewed the changes to the test setup and cleanup, updated the README to reflect the chosen runner and supported Node versions, and ran the full test suite and TypeScript checks.
