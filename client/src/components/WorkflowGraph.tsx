@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import {
   Background, Controls, Handle, MarkerType, Position, ReactFlow, useEdgesState, useNodesState,
   type Connection, type Edge, type Node, type NodeProps, type ReactFlowInstance,
@@ -21,7 +21,7 @@ export type StepNode = Node<StepNodeData, 'step'>;
 export type GraphInstance = ReactFlowInstance<StepNode, Edge>;
 export type StepPosition = Pick<StepNode, 'id' | 'position'>;
 
-function StepCard({ data, selected }: NodeProps<StepNode>) {
+const StepCard = memo(function StepCard({ data, selected }: NodeProps<StepNode>) {
   return (
     <article className={`step-node${selected ? ' step-node--selected' : ''}${data.critical ? ' step-node--critical' : ''}`}>
       <Handle type="target" position={Position.Left} aria-label="Connect from prerequisite" />
@@ -40,7 +40,7 @@ function StepCard({ data, selected }: NodeProps<StepNode>) {
       <Handle type="source" position={Position.Right} aria-label="Connect to dependent step" />
     </article>
   );
-}
+});
 
 function StepTiming({ label, minutes }: { label: string; minutes?: number }) {
   const display = formatDuration(minutes);
@@ -96,6 +96,7 @@ export function WorkflowGraph({ workflow, schedule, editable, onReady, onConnect
 
   return (
     <ReactFlow
+      className={workflow.steps.length >= 80 ? 'workflow-graph--large' : undefined}
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
@@ -121,6 +122,7 @@ export function WorkflowGraph({ workflow, schedule, editable, onReady, onConnect
       edgesReconnectable={false}
       fitView
       fitViewOptions={fitOptions}
+      onlyRenderVisibleElements={workflow.steps.length >= 80}
       minZoom={0.18}
       maxZoom={1.75}
     >

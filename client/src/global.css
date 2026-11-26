@@ -463,6 +463,13 @@ body {
 .step-node__minutes { display:block; margin-top:2px; font-size:8px; font-weight:400; opacity:.8; overflow-wrap:anywhere; }
 .step-node.step-node--critical { border-left:2px solid currentColor; }
 
+/* The large fixture keeps the translucent card surface without compositing
+   a separate backdrop blur for every node while the viewport moves. */
+.workflow-graph--large .step-node {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 .canvas-feedback {
   position:absolute;
   z-index:6;
