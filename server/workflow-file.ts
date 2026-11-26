@@ -1,6 +1,8 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import type { Workflow } from '../shared/workflow.ts';
+import { randomUUID } from 'node:crypto';
+import type { Workflow } from '../shared/workflow/index.ts';
+import { validateWorkflow } from '../shared/workflow-validation/index.ts';
 
 const defaultWorkflowPath = 'data/workflow.json';
 
@@ -9,7 +11,9 @@ export async function readWorkflow(
 ): Promise<Workflow | null> {
   try {
     const contents = await readFile(resolve(filePath), 'utf8');
-    return JSON.parse(contents) as Workflow;
+    const workflow: unknown = JSON.parse(contents);
+    if (!validateWorkflow(workflow).valid) throw new Error('Stored workflow has invalid data.');
+    return workflow as Workflow;
   } catch (error) {
     if (isMissingFile(error)) {
       return null;
@@ -21,10 +25,23 @@ export async function readWorkflow(
 export async function writeWorkflow(
   workflow: Workflow,
   filePath = defaultWorkflowPath,
-): Promise<void> {
+  shouldCommit: () => boolean = () => true,
+): Promise<boolean> {
   const resolvedPath = resolve(filePath);
   await mkdir(dirname(resolvedPath), { recursive: true });
-  await writeFile(resolvedPath, `${JSON.stringify(workflow, null, 2)}\n`, 'utf8');
+  const temporaryPath = `${resolvedPath}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(workflow, null, 2)}\n`, 'utf8');
+    if (!shouldCommit()) {
+      await rm(temporaryPath, { force: true });
+      return false;
+    }
+    await rename(temporaryPath, resolvedPath);
+    return true;
+  } catch (error) {
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }
 
 function isMissingFile(error: unknown): boolean {

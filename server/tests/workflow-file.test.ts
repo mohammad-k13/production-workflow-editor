@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test } from 'node:test';
-import { exampleWorkflow } from '../shared/example-workflow.ts';
-import { readWorkflow, writeWorkflow } from './workflow-file.ts';
+import { test } from 'vitest';
+import { exampleWorkflow } from '../../shared/example-workflow.ts';
+import { readWorkflow, writeWorkflow } from '../workflow-file.ts';
 
 test('writeWorkflow round-trips a document', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'workflow-file-'));
