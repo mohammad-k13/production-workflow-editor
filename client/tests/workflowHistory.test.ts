@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import type { Workflow } from '../../shared/workflow/index.ts';
 import { createWorkflowHistory, workflowHistoryReducer } from '../src/workflowHistory.ts';
 

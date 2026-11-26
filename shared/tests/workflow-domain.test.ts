@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { calculateSchedule, InvalidWorkflowError } from '../workflow-schedule/index.ts';
 import { validateWorkflow } from '../workflow-validation/index.ts';
 import type { Workflow, WorkflowConnection, WorkflowStep } from '../workflow/index.ts';

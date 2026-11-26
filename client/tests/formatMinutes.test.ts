@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { formatDuration } from '../src/formatMinutes.ts';
 
 test('converts workflow duration at hour, day, and 30-day month boundaries', () => {
