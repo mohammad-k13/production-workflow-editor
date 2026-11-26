@@ -4,15 +4,16 @@ type Point = { x: number; y: number };
 type GlyphCell = Point & { glyph: string; seed: number; density: number };
 type TrailPoint = Point & { time: number; strength: number };
 
-const CELL_WIDTH = 9;
-const CELL_HEIGHT = 12;
+const CELL_WIDTH = 11;
+const CELL_HEIGHT = 14;
 const BASE_FONT_SIZE = 10;
 const FONT_FAMILY = '"Cascadia Mono", Consolas, monospace';
 const ASCII_RAMP = '.,:;!+=*#%@';
 const POINTER_RADIUS = 52;
 const TRAIL_RADIUS = 62;
 const TRAIL_LIFETIME_MS = 1_200;
-const MAX_TRAIL_POINTS = 96;
+const MAX_TRAIL_POINTS = 36;
+const FRAME_INTERVAL_MS = 1000 / 30;
 const MIN_GLOW = 0.035;
 
 /** A full-page ASCII field with a fading trail along the pointer's path. */
@@ -43,7 +44,9 @@ export function MouseGlowBackground() {
 
     const draw = (time: number) => {
       const isDark = darkMode.matches;
-      const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
+      // The background is decorative and full-screen. Keeping its backing
+      // canvas near 1x avoids spending editor time on high-DPI overdraw.
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.2);
       const pixelWidth = Math.round(width * pixelRatio);
       const pixelHeight = Math.round(height * pixelRatio);
       if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
@@ -106,6 +109,10 @@ export function MouseGlowBackground() {
     };
 
     const animateTrail = (time: number) => {
+      if (previousTime !== 0 && time - previousTime < FRAME_INTERVAL_MS) {
+        frameId = window.requestAnimationFrame(animateTrail);
+        return;
+      }
       const frameScale = previousTime === 0 ? 1 : Math.min((time - previousTime) / 16.667, 2);
       previousTime = time;
       cursorEnergy *= Math.pow(0.94, frameScale);
